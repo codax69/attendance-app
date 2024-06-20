@@ -12,6 +12,8 @@ app.use(express.static("public"))
 
 
 import userRouter from "./routes/user.routes.js"
+import attendanceRouter from "./routes/attendance.routes.js"
 app.use("/api/v1/user",userRouter)
+app.use("/api/v1/",attendanceRouter)
 
 export{app}

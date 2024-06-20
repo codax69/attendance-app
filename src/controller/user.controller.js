@@ -3,6 +3,8 @@ import { ApiError } from "../utils/ApiErrorHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import jwt from "jsonwebtoken";
+import { Query } from "mongoose";
+import { query } from "express";
 
 const generateAccessTokenAndRefreshToken = async (userId) => {
   try {
@@ -72,7 +74,7 @@ const UserRegister = asyncHandler(async (req, res, next) => {
 
 const loginUser = asyncHandler(async (req, res, next) => {
   const { enrollmentNo, mobileNo, password } = req.body;
-  // console.log({ enrollmentNo, mobileNo, password });
+  console.log({ enrollmentNo, mobileNo, password });
 
   if (!enrollmentNo && !mobileNo) {
     throw new ApiError(401, "Enrollment or Mobile Number Required..!");
@@ -178,11 +180,12 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res, next) => {
+  console.log(req.user._id)
   try {
     const user = await User.findOne(req.user._id).select(
       "-password -refreshToken -accessToken"
     );
-    // console.log(user);
+    console.log(user);
     res
       .status(200)
       .json(new ApiResponse(200, { user }, "Get User Successfully.....!"));
@@ -242,8 +245,21 @@ const updateAccountDetails = asyncHandler(async (req, res, next) => {
   .json(new ApiResponse(200,{user},"Update Details Successfully..!"))
 });
 
- const searchUSer = asyncHandler(async()=>{
-  req.params
+ const searchUser = asyncHandler(async(req,res,next)=>{
+  try {
+    const {mobileNo} = req.params
+    if(!mobileNo){
+     throw new ApiError("User Not Found.....")
+    }
+    const user = await User.findOne({mobileNo:mobileNo})
+    if(!user){
+        throw new ApiError(404,"user not Found..!")
+    }
+    res.status(200)
+    .json(new ApiResponse(200,user,"User find successfully..!"))
+  } catch (error) {
+    next(error)
+  }
  })
 export {
   UserRegister,
@@ -252,5 +268,6 @@ export {
   refreshAccessToken,
   getCurrentUser,
   changePassword,
-  updateAccountDetails
+  updateAccountDetails,
+  searchUser
 };
