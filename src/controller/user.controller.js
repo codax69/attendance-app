@@ -74,7 +74,7 @@ const UserRegister = asyncHandler(async (req, res, next) => {
 
 const loginUser = asyncHandler(async (req, res, next) => {
   const { enrollmentNo, mobileNo, password } = req.body;
-  console.log({ enrollmentNo, mobileNo, password });
+  // console.log({ enrollmentNo, mobileNo, password });
 
   if (!enrollmentNo && !mobileNo) {
     throw new ApiError(401, "Enrollment or Mobile Number Required..!");
@@ -180,12 +180,12 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res, next) => {
-  console.log(req.user._id)
+  // console.log(req.user._id)
   try {
     const user = await User.findOne(req.user._id).select(
       "-password -refreshToken -accessToken"
     );
-    console.log(user);
+    // console.log(user);
     res
       .status(200)
       .json(new ApiResponse(200, { user }, "Get User Successfully.....!"));
