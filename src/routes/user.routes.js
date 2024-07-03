@@ -15,5 +15,5 @@ router.route("/get-current-user").get(verifyJwt,getCurrentUser)
 
 router.route("/change-password").patch(verifyJwt,changePassword)
 router.route("/update-account-details").patch(verifyJwt,updateAccountDetails)
-router.route("/p/:mobileNo").get(searchUser)
+router.route("/p/:mobileNo").get(verifyJwt,searchUser)
 export default router
