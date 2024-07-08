@@ -6,6 +6,11 @@ dotenv.config({
 })
 const port = process.env.PORT || 3000
 
+
+app.get("/",(req,res)=>{
+   res.send("web Is Healthy...!")
+})
+
 ConnectDB().then(()=>{
     app.listen(port,()=>{
         console.log(`Your server running on ${port} port`)
