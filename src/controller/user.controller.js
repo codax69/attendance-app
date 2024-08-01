@@ -3,8 +3,7 @@ import { ApiError } from "../utils/ApiErrorHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import jwt from "jsonwebtoken";
-import { Query } from "mongoose";
-import { query } from "express";
+
 
 const generateAccessTokenAndRefreshToken = async (userId) => {
   try {
@@ -27,8 +26,15 @@ const options = {
   secure: true,
   sameSite: "strict",
 };
-
-const UserRegister = asyncHandler(async (req, res, next) => {
+const userWelcome = asyncHandler(async(req,res,next)=>{
+  try {
+    console.log("Request received..!")
+    res.status(200).json(new ApiResponse(200,{"message":"Hello world"},"Request received..!"))
+  } catch (error) {
+    next(error)
+  }
+})
+ const UserRegister = asyncHandler(async (req, res, next) => {
   try {
     const { fullname, enrollmentNo, email, mobileNo, password } = req.body;
     // console.log({ fullname, enrollmentNo, email, mobileNo, password })
@@ -269,5 +275,6 @@ export {
   getCurrentUser,
   changePassword,
   updateAccountDetails,
-  searchUser
+  searchUser,
+  userWelcome
 };

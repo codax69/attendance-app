@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { UserRegister, changePassword, getCurrentUser, logOutUser, loginUser, refreshAccessToken, updateAccountDetails,searchUser } from "../controller/user.controller.js";
+import { userWelcome,UserRegister, changePassword, getCurrentUser, logOutUser, loginUser, refreshAccessToken, updateAccountDetails,searchUser } from "../controller/user.controller.js";
 import {verifyJwt} from "../middleware/auth.middleware.js"
 
 const router = Router()
-
+router.route("/").get(userWelcome)
 router.route("/register").post(UserRegister)
 router.route("/login").post(loginUser)
 
