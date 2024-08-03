@@ -37,7 +37,7 @@ const userWelcome = asyncHandler(async(req,res,next)=>{
  const UserRegister = asyncHandler(async (req, res, next) => {
   try {
     const { fullname, enrollmentNo, email, mobileNo, password } = req.body;
-    // console.log({ fullname, enrollmentNo, email, mobileNo, password })
+    console.log({ fullname, enrollmentNo, email, mobileNo, password })
     if (
       [fullname, enrollmentNo, email, mobileNo, password].some(
         (field) => !field || field.trim() === ""
