@@ -3,7 +3,7 @@ import { userWelcome,UserRegister, changePassword, getCurrentUser, logOutUser, l
 import {verifyJwt} from "../middleware/auth.middleware.js"
 
 const router = Router()
-router.route("/").get(userWelcome)
+router.route("/welcome").get(userWelcome)
 router.route("/register").post(UserRegister)
 router.route("/login").post(loginUser)
 
