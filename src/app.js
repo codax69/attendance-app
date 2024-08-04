@@ -22,7 +22,7 @@ app.use((req, res, next) => {
 app.use(
   cors({
     origin:
-      `${process.env.CORS_ORIGIN}` || "https://ictsm-attendance.vercel.app",
+      `${process.env.CORS_ORIGIN}` || "https://ictsm-attendance.vercel.app/",
     credentials: true,
   })
 );
