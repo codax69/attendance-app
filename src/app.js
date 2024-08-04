@@ -8,7 +8,7 @@ app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser({}));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cors({
-  origin: 'https://ictsm-attendance.vercel.app/', 
+  origin: '*', 
   methods: ['GET', 'POST','PATCH', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'] 
 }));
