@@ -38,6 +38,13 @@ const userSchema = new Schema(
     location: {
       type: String,
     },
+    isLoggedIn:{
+      type:Boolean,
+      default:false
+    },
+    age:{
+      type:String
+    }
   },
   { timestamps: true }
 );

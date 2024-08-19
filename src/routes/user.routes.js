@@ -8,7 +8,7 @@ router.route("/register").post(UserRegister)
 router.route("/login").post(loginUser)
 
 //secure routes
-router.route("/logout").post(verifyJwt,logOutUser)
+router.route("/logout").get(verifyJwt,logOutUser)
 router.route("/refresh-token").post(verifyJwt,refreshAccessToken)
 
 router.route("/get-current-user").get(verifyJwt,getCurrentUser)

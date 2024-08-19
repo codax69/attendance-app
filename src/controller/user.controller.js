@@ -4,7 +4,6 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import jwt from "jsonwebtoken";
 
-
 const generateAccessTokenAndRefreshToken = async (userId) => {
   try {
     const user = await User.findById(userId);
@@ -26,18 +25,22 @@ const options = {
   secure: true,
   sameSite: "strict",
 };
-const userWelcome = asyncHandler(async(req,res,next)=>{
+const userWelcome = asyncHandler(async (req, res, next) => {
   try {
-    console.log("Request received..!")
-    res.status(200).json(new ApiResponse(200,{"message":"Hello world"},"Request received..!"))
+    console.log("Request received..!");
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, { message: "Hello world" }, "Request received..!")
+      );
   } catch (error) {
-    next(error)
+    next(error);
   }
-})
- const UserRegister = asyncHandler(async (req, res, next) => {
+});
+const UserRegister = asyncHandler(async (req, res, next) => {
   try {
-    const { fullname, enrollmentNo, email, mobileNo, password } = req.body;
-    console.log({ fullname, enrollmentNo, email, mobileNo, password })
+    const { fullname, enrollmentNo, email, mobileNo, password,age } = req.body;
+    console.log({ fullname, enrollmentNo, email, mobileNo, password,age });
     if (
       [fullname, enrollmentNo, email, mobileNo, password].some(
         (field) => !field || field.trim() === ""
@@ -62,6 +65,7 @@ const userWelcome = asyncHandler(async(req,res,next)=>{
       email,
       mobileNo,
       password,
+      age
     });
     if (!user) {
       throw new ApiError(
@@ -103,10 +107,12 @@ const loginUser = asyncHandler(async (req, res, next) => {
   }
   // console.log(tokens);
 
-  const loggedInUser = await User.findById(user._id).select(
-    "-password -refreshToken"
-  );
-
+  const loggedInUser = await User.findByIdAndUpdate(
+    user._id,
+    { $set: { isLoggedIn: true } },
+    { new: true }
+  ).select("-password -refreshToken");
+ 
   res
     .status(200)
     .cookie("accessToken", tokens.accessToken, options)
@@ -128,6 +134,9 @@ const logOutUser = asyncHandler(async (req, res, next) => {
     await User.findByIdAndUpdate(
       req.user._id,
       {
+        $set:{
+          isLoggedIn:false
+        },
         $unset: {
           refreshToken: 1,
         },
@@ -247,26 +256,27 @@ const updateAccountDetails = asyncHandler(async (req, res, next) => {
     }
   );
   return res
-  .status(200)
-  .json(new ApiResponse(200,{user},"Update Details Successfully..!"))
+    .status(200)
+    .json(new ApiResponse(200, { user }, "Update Details Successfully..!"));
 });
 
- const searchUser = asyncHandler(async(req,res,next)=>{
+const searchUser = asyncHandler(async (req, res, next) => {
   try {
-    const {mobileNo} = req.params
-    if(!mobileNo){
-     throw new ApiError("User Not Found.....")
+    const { mobileNo } = req.params;
+    if (!mobileNo) {
+      throw new ApiError("User Not Found.....");
     }
-    const user = await User.findOne({mobileNo:mobileNo})
-    if(!user){
-        throw new ApiError(404,"user not Found..!")
+    const user = await User.findOne({ mobileNo: mobileNo });
+    if (!user) {
+      throw new ApiError(404, "user not Found..!");
     }
-    res.status(200)
-    .json(new ApiResponse(200,user,"User find successfully..!"))
+    res
+      .status(200)
+      .json(new ApiResponse(200, user, "User find successfully..!"));
   } catch (error) {
-    next(error)
+    next(error);
   }
- })
+});
 export {
   UserRegister,
   loginUser,
@@ -276,5 +286,5 @@ export {
   changePassword,
   updateAccountDetails,
   searchUser,
-  userWelcome
+  userWelcome,
 };
