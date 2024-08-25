@@ -44,6 +44,10 @@ const userSchema = new Schema(
     },
     age:{
       type:String
+    },
+    logCount:{
+      type:Number,
+      default:0
     }
   },
   { timestamps: true }

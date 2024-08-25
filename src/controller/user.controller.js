@@ -39,8 +39,8 @@ const userWelcome = asyncHandler(async (req, res, next) => {
 });
 const UserRegister = asyncHandler(async (req, res, next) => {
   try {
-    const { fullname, enrollmentNo, email, mobileNo, password,age } = req.body;
-    console.log({ fullname, enrollmentNo, email, mobileNo, password,age });
+    const { fullname, enrollmentNo, email, mobileNo, password, age } = req.body;
+    // console.log({ fullname, enrollmentNo, email, mobileNo, password, age });
     if (
       [fullname, enrollmentNo, email, mobileNo, password].some(
         (field) => !field || field.trim() === ""
@@ -65,7 +65,7 @@ const UserRegister = asyncHandler(async (req, res, next) => {
       email,
       mobileNo,
       password,
-      age
+      age,
     });
     if (!user) {
       throw new ApiError(
@@ -109,10 +109,10 @@ const loginUser = asyncHandler(async (req, res, next) => {
 
   const loggedInUser = await User.findByIdAndUpdate(
     user._id,
-    { $set: { isLoggedIn: true } },
+    { $set: { isLoggedIn: true }, $inc: { logCount: 1 } },
     { new: true }
   ).select("-password -refreshToken");
- 
+
   res
     .status(200)
     .cookie("accessToken", tokens.accessToken, options)
@@ -134,8 +134,8 @@ const logOutUser = asyncHandler(async (req, res, next) => {
     await User.findByIdAndUpdate(
       req.user._id,
       {
-        $set:{
-          isLoggedIn:false
+        $set: {
+          isLoggedIn: false,
         },
         $unset: {
           refreshToken: 1,
@@ -200,7 +200,6 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
     const user = await User.findOne(req.user._id).select(
       "-password -refreshToken -accessToken"
     );
-    // console.log(user);
     res
       .status(200)
       .json(new ApiResponse(200, { user }, "Get User Successfully.....!"));
