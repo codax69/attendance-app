@@ -8,7 +8,7 @@ app.use(express.json({ limit: "16kb" }));
 app.use(cookieParser({}));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cors({
-  origin: "*", 
+  origin: "https://attendance-app-1.onrender.com", 
   methods: ['GET', 'POST','PATCH', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'] 
 }));
