@@ -2,23 +2,50 @@ import { ApiError } from "../utils/ApiErrorHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { attendance } from "../models/attendance.model.js";
+import { User } from "../models/user.model.js";
 
-const attendanceCheck = asyncHandler(async (req, res, next) => {
-  try {
-    const { activeDays, monthlyAttendance, presentDays, googleSheetLink } =
-      req.body;
+export const attendanceCheck = asyncHandler(async (req, res, next) => {
+  const { activeDays, monthlyAttendance, presentDays, googleSheetLink } =
+    req.body;
 
-    const attendance = await attendance.create({
-      activeDays,
-      monthlyAttendance,
-      presentDays,
-      googleSheetLink,
-    });
+  const newAttendance = await attendance.create({
+    user: req.user?._id,
+    activeDays,
+    monthlyAttendance,
+    presentDays,
+    googleSheetLink,
+  });
 
-    res
-    .status(200)
-    .res(new ApiResponse(200 ,{attendance},"attendance injected"))
-  } catch (error) {
-    next(error);
+  res
+    .status(201)
+    .json(new ApiResponse(201, { attendance: newAttendance }, "Attendance created"));
+});
+
+export const getAttendanceHistory = asyncHandler(async (req, res, next) => {
+  const userId = req.user?._id;
+  if (!userId) {
+    throw new ApiError(401, "Unauthorized Request");
   }
+
+  const history = await attendance.find({ user: userId }).sort({ createdAt: -1 });
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, { history }, "Attendance history fetched successfully"));
+});
+
+export const getUserAttendanceHistory = asyncHandler(async (req, res, next) => {
+  const { mobileNo } = req.params;
+  if (!mobileNo) {
+    throw new ApiError(400, "Mobile Number is required");
+  }
+  const student = await User.findOne({ mobileNo });
+  if (!student) {
+    throw new ApiError(404, "Student not found");
+  }
+  const history = await attendance.find({ user: student._id }).sort({ createdAt: -1 });
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, { history }, "Student attendance history fetched successfully"));
 });

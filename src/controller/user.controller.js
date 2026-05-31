@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiErrorHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
+import { Class } from "../models/class.model.js";
 import jwt from "jsonwebtoken";
 
 const generateAccessTokenAndRefreshToken = async (userId) => {
@@ -39,14 +40,15 @@ const userWelcome = asyncHandler(async (req, res, next) => {
 });
 const UserRegister = asyncHandler(async (req, res, next) => {
   try {
-    const { fullname, enrollmentNo, email, mobileNo, password, age } = req.body;
-    // console.log({ fullname, enrollmentNo, email, mobileNo, password, age });
+    const { fullname, enrollmentNo, email, mobileNo, password, age, class: userClass, rollNo, role } = req.body;
+    // console.log({ fullname, enrollmentNo, email, mobileNo, password, age, class: userClass, rollNo, role });
     if (
-      [fullname, enrollmentNo, email, mobileNo, password].some(
-        (field) => !field || field.trim() === ""
+      !fullname || !enrollmentNo || !email || !mobileNo || !password || !userClass || !rollNo ||
+      [fullname, enrollmentNo, email, mobileNo, password, userClass, rollNo].some(
+        (field) => typeof field !== "string" || field.trim() === ""
       )
     ) {
-      throw new ApiError(402, "All fields are required....!");
+      throw new ApiError(400, "All fields are required");
     }
 
     const existUser = await User.findOne({
@@ -66,6 +68,9 @@ const UserRegister = asyncHandler(async (req, res, next) => {
       mobileNo,
       password,
       age,
+      class: userClass,
+      rollNo,
+      role: role || "student",
     });
     if (!user) {
       throw new ApiError(
@@ -84,13 +89,19 @@ const UserRegister = asyncHandler(async (req, res, next) => {
 
 const loginUser = asyncHandler(async (req, res, next) => {
   const { enrollmentNo, mobileNo, password } = req.body;
-  // console.log({ enrollmentNo, mobileNo, password });
 
   if (!enrollmentNo && !mobileNo) {
     throw new ApiError(401, "Enrollment or Mobile Number Required..!");
   }
+  if (!password) {
+    throw new ApiError(400, "Password is required");
+  }
 
-  const user = await User.findOne({ $or: [{ enrollmentNo }, { mobileNo }] });
+  const query = [];
+  if (enrollmentNo) query.push({ enrollmentNo });
+  if (mobileNo) query.push({ mobileNo });
+
+  const user = await User.findOne({ $or: query });
 
   if (!user) {
     throw new ApiError(402, "User Does Not Exist....");
@@ -105,7 +116,6 @@ const loginUser = asyncHandler(async (req, res, next) => {
   if (!tokens || !tokens.accessToken || !tokens.refreshToken) {
     throw new ApiError(500, "Failed to generate tokens.");
   }
-  // console.log(tokens);
 
   const loggedInUser = await User.findByIdAndUpdate(
     user._id,
@@ -151,7 +161,7 @@ const logOutUser = asyncHandler(async (req, res, next) => {
       .clearCookie("refreshToken", options)
       .json(new ApiResponse(200, {}, "User Log Out Successfully"));
   } catch (error) {
-    next(ApiError(error.message));
+    next(new ApiError(500, error.message));
   }
 });
 const refreshAccessToken = asyncHandler(async (req, res, next) => {
@@ -174,7 +184,7 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
     if (incomingRefreshToken !== user?.refreshToken) {
       throw new ApiError(401, "refreshToken is expired or used");
     }
-    const { accessToken, newRefreshToken } = generateAccessTokenAndRefreshToken(
+    const { accessToken, refreshToken: newRefreshToken } = await generateAccessTokenAndRefreshToken(
       user._id
     );
 
@@ -195,9 +205,8 @@ const refreshAccessToken = asyncHandler(async (req, res, next) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res, next) => {
-  // console.log(req.user._id)
   try {
-    const user = await User.findOne(req.user._id).select(
+    const user = await User.findById(req.user?._id).select(
       "-password -refreshToken -accessToken"
     );
     res
@@ -211,10 +220,10 @@ const getCurrentUser = asyncHandler(async (req, res, next) => {
 const changePassword = asyncHandler(async (req, res, next) => {
   try {
     const { currentPassword, newPassword, confPassword } = req.body;
-    // console.log({ currentPassword, newPassword, confPassword });
     if (
+      !currentPassword || !newPassword || !confPassword ||
       [currentPassword, newPassword, confPassword].some(
-        (field) => field.trim() === ""
+        (field) => typeof field !== "string" || field.trim() === ""
       )
     ) {
       throw new ApiError(402, "All fields are required....");
@@ -238,7 +247,15 @@ const changePassword = asyncHandler(async (req, res, next) => {
   }
 });
 const updateAccountDetails = asyncHandler(async (req, res, next) => {
-  const { fullname, enrollmentNo, email, mobileNo } = req.body;
+  const { fullname, enrollmentNo, email, mobileNo, class: userClass, rollNo } = req.body;
+
+  if (
+    [fullname, enrollmentNo, email, mobileNo, userClass, rollNo].some(
+      (field) => field !== undefined && (typeof field !== "string" || field.trim() === "")
+    )
+  ) {
+    throw new ApiError(400, "Fields cannot be empty values.");
+  }
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,
@@ -248,10 +265,13 @@ const updateAccountDetails = asyncHandler(async (req, res, next) => {
         fullname: fullname,
         mobileNo: mobileNo,
         enrollmentNo: enrollmentNo,
+        class: userClass,
+        rollNo: rollNo,
       },
     },
     {
       new: true,
+      runValidators: true,
     }
   );
   return res
@@ -263,19 +283,31 @@ const searchUser = asyncHandler(async (req, res, next) => {
   try {
     const { mobileNo } = req.params;
     if (!mobileNo) {
-      throw new ApiError("User Not Found.....");
+      throw new ApiError(400, "Mobile Number is required");
     }
-    const user = await User.findOne({ mobileNo: mobileNo });
+    const user = await User.findOne({ mobileNo: mobileNo }).select("-password -refreshToken -accessToken");
     if (!user) {
-      throw new ApiError(404, "user not Found..!");
+      throw new ApiError(404, "User not found..!");
     }
     res
       .status(200)
-      .json(new ApiResponse(200, user, "User find successfully..!"));
+      .json(new ApiResponse(200, user, "User found successfully..!"));
   } catch (error) {
     next(error);
   }
 });
+
+const getAllClasses = asyncHandler(async (req, res, next) => {
+  try {
+    const classes = await Class.find().sort({ name: 1 });
+    res.status(200).json(
+      new ApiResponse(200, { classes }, "Classes fetched successfully")
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
 export {
   UserRegister,
   loginUser,
@@ -286,4 +318,5 @@ export {
   updateAccountDetails,
   searchUser,
   userWelcome,
+  getAllClasses,
 };

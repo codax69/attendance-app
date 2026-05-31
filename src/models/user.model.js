@@ -45,6 +45,17 @@ const userSchema = new Schema(
     age:{
       type:String
     },
+    class: {
+      type: String
+    },
+    rollNo: {
+      type: String
+    },
+    role: {
+      type: String,
+      enum: ["student", "admin"],
+      default: "student"
+    },
     logCount:{
       type:Number,
       default:0
