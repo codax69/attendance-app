@@ -2,6 +2,7 @@ import { ApiError } from "../utils/ApiErrorHandler.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Notification } from "../models/notification.model.js";
+import { User } from "../models/user.model.js";
 import mongoose from "mongoose";
 
 // Fetch notifications for the authenticated user
@@ -114,6 +115,53 @@ export const clearAllNotifications = asyncHandler(async (req, res, next) => {
     }
     await Notification.deleteMany({ user: userId });
     res.status(200).json(new ApiResponse(200, null, "All notifications cleared"));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Broadcast notification to all users in the same department
+export const broadcastNotification = asyncHandler(async (req, res, next) => {
+  try {
+    const { title, message, type } = req.body;
+    if (!title || !message) {
+      throw new ApiError(400, "Title and message are required");
+    }
+
+    // Only teachers or admins can broadcast
+    if (req.user?.role !== "admin" && req.user?.role !== "teacher") {
+      throw new ApiError(403, "Access Denied: Only teachers/admins can broadcast notices");
+    }
+
+    const deptCode = req.user?.departmentCode;
+    if (!deptCode) {
+      throw new ApiError(400, "You must have a department code assigned to broadcast notices.");
+    }
+
+    // Find all users registered in this department (students, employees, etc.)
+    const users = await User.find({ departmentCode: deptCode }).select("_id");
+    if (users.length === 0) {
+      return res.status(200).json(new ApiResponse(200, null, "No users found in this department."));
+    }
+
+    const notifications = users.map((u) => ({
+      user: u._id,
+      title,
+      message,
+      type: type || "info",
+    }));
+
+    await Notification.insertMany(notifications);
+
+    res
+      .status(201)
+      .json(
+        new ApiResponse(
+          201,
+          null,
+          `Announcement broadcasted successfully to ${users.length} users in department ${deptCode}.`
+        )
+      );
   } catch (error) {
     next(error);
   }

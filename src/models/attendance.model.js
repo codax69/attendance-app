@@ -17,6 +17,18 @@ const attendanceSchema = new Schema(
     },
     activeDays:{
         type:String
+    },
+    session:{
+        type:String,
+        default:""
+    },
+    departmentCode:{
+        type:String,
+        default:""
+    },
+    departmentName:{
+        type:String,
+        default:""
     }
   },
   { timestamps: true }

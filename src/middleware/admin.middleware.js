@@ -5,8 +5,8 @@ export const verifyAdmin = (req, res, next) => {
     if (!req.user) {
       throw new ApiError(401, "Unauthorized Request");
     }
-    if (req.user.role !== "admin") {
-      throw new ApiError(403, "Access Denied: Admin privileges required");
+    if (req.user.role !== "admin" && req.user.role !== "teacher") {
+      throw new ApiError(403, "Access Denied: Admin/Teacher privileges required");
     }
     next();
   } catch (error) {

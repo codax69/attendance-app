@@ -53,8 +53,18 @@ const userSchema = new Schema(
     },
     role: {
       type: String,
-      enum: ["student", "admin"],
+      enum: ["student", "admin", "teacher", "employee"],
       default: "student"
+    },
+    departmentCode: {
+      type: String,
+      trim: true,
+      default: ""
+    },
+    departmentName: {
+      type: String,
+      trim: true,
+      default: ""
     },
     logCount:{
       type:Number,

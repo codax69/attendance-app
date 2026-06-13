@@ -8,7 +8,11 @@ import { Class } from "../models/class.model.js";
 // GET /admin/dashboard — Overall dashboard stats
 export const getDashboardStats = asyncHandler(async (req, res, next) => {
   try {
-    const totalStudents = await User.countDocuments({ role: "student" });
+    const userQuery = { role: { $in: ["student", "employee"] } };
+    if (req.user?.role === "teacher") {
+      userQuery.departmentCode = req.user.departmentCode;
+    }
+    const totalStudents = await User.countDocuments(userQuery);
 
     // Get today's date string in DD/MM/YYYY format
     const today = new Date();
@@ -17,8 +21,15 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     const yyyy = today.getFullYear();
     const todayStr = `${dd}/${mm}/${yyyy}`;
 
+    // Fetch students to map today's records
+    const studentsInScope = await User.find(userQuery).select("_id");
+    const studentIdsInScope = studentsInScope.map(s => s._id);
+
     // Count today's attendance records by status
-    const todayRecords = await attendance.find({ presentDays: todayStr });
+    const todayRecords = await attendance.find({ 
+      presentDays: todayStr,
+      user: { $in: studentIdsInScope }
+    });
     const todayPresentCount = todayRecords.filter(r => r.monthlyAttendance === "PRESENT").length;
     const todayLateCount = todayRecords.filter(r => r.monthlyAttendance === "LATE").length;
     const todayHalfDayCount = todayRecords.filter(r => r.monthlyAttendance === "HALF_DAY").length;
@@ -28,7 +39,7 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
 
     // Class-wise student breakdown
     const classBreakdown = await User.aggregate([
-      { $match: { role: "student" } },
+      { $match: userQuery },
       {
         $group: {
           _id: "$class",
@@ -43,7 +54,11 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     const classStats = await Promise.all(
       classes.map(async (cls) => {
         const classPattern = `${cls.name} (${cls.code})`;
-        const studentsInClass = await User.find({ class: classPattern, role: "student" }).select("_id");
+        const studentClassQuery = { class: classPattern, role: { $in: ["student", "employee"] } };
+        if (req.user?.role === "teacher") {
+          studentClassQuery.departmentCode = req.user.departmentCode;
+        }
+        const studentsInClass = await User.find(studentClassQuery).select("_id");
         const studentIds = studentsInClass.map(s => s._id);
 
         const classTodayRecords = todayRecords.filter(r => studentIds.some(id => id.equals(r.user)));
@@ -77,7 +92,7 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     );
 
     // Total attendance records
-    const totalRecords = await attendance.countDocuments();
+    const totalRecords = await attendance.countDocuments({ user: { $in: studentIdsInScope } });
 
     res.status(200).json(
       new ApiResponse(
@@ -107,8 +122,14 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
 // GET /admin/students — List all students with optional class filter
 export const getAllStudents = asyncHandler(async (req, res, next) => {
   try {
-    const { class: classFilter, search } = req.query;
-    const filter = { role: "student" };
+    const { class: classFilter, search, department: departmentFilter } = req.query;
+    const filter = { role: { $in: ["student", "employee"] } };
+
+    if (req.user?.role === "teacher") {
+      filter.departmentCode = req.user.departmentCode;
+    } else if (departmentFilter && departmentFilter !== "ALL") {
+      filter.departmentCode = departmentFilter;
+    }
 
     if (classFilter && classFilter !== "ALL") {
       // Resolve class code to name if needed
@@ -206,11 +227,15 @@ export const getStudentAttendance = asyncHandler(async (req, res, next) => {
   try {
     const { userId } = req.params;
     
-    const student = await User.findById(userId).select(
+    const studentQuery = { _id: userId };
+    if (req.user?.role === "teacher") {
+      studentQuery.departmentCode = req.user.departmentCode;
+    }
+    const student = await User.findOne(studentQuery).select(
       "-password -refreshToken -accessToken"
     );
     if (!student) {
-      throw new ApiError(404, "Student not found");
+      throw new ApiError(404, "Student not found or unauthorized access");
     }
 
     const records = await attendance
@@ -235,10 +260,16 @@ export const getStudentAttendance = asyncHandler(async (req, res, next) => {
 // GET /admin/report — Class-wise attendance report with date range
 export const getClassAttendanceReport = asyncHandler(async (req, res, next) => {
   try {
-    const { class: classFilter, month, year } = req.query;
+    const { class: classFilter, month, year, department: departmentFilter } = req.query;
 
     // Get students for the class
-    const studentFilter = { role: "student" };
+    const studentFilter = { role: { $in: ["student", "employee"] } };
+    if (req.user?.role === "teacher") {
+      studentFilter.departmentCode = req.user.departmentCode;
+    } else if (departmentFilter && departmentFilter !== "ALL") {
+      studentFilter.departmentCode = departmentFilter;
+    }
+
     if (classFilter && classFilter !== "ALL") {
       // Resolve class code to name if needed
       const cls = await Class.findOne({ code: classFilter });
@@ -340,9 +371,13 @@ export const updateStudentAttendance = asyncHandler(async (req, res, next) => {
       throw new ApiError(400, "Invalid attendance status");
     }
 
-    const student = await User.findById(userId);
+    const studentQuery = { _id: userId };
+    if (req.user?.role === "teacher") {
+      studentQuery.departmentCode = req.user.departmentCode;
+    }
+    const student = await User.findOne(studentQuery);
     if (!student) {
-      throw new ApiError(404, "Student not found");
+      throw new ApiError(404, "Student not found or unauthorized access");
     }
 
     // Check if record exists for this student and date

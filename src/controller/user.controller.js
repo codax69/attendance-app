@@ -40,8 +40,8 @@ const userWelcome = asyncHandler(async (req, res, next) => {
 });
 const UserRegister = asyncHandler(async (req, res, next) => {
   try {
-    const { fullname, enrollmentNo, email, mobileNo, password, age, class: userClass, rollNo, role } = req.body;
-    // console.log({ fullname, enrollmentNo, email, mobileNo, password, age, class: userClass, rollNo, role });
+    const { fullname, enrollmentNo, email, mobileNo, password, age, class: userClass, rollNo, role, department } = req.body;
+    // console.log({ fullname, enrollmentNo, email, mobileNo, password, age, class: userClass, rollNo, role, department });
     if (
       !fullname || !enrollmentNo || !email || !mobileNo || !password || !userClass || !rollNo ||
       [fullname, enrollmentNo, email, mobileNo, password, userClass, rollNo].some(
@@ -61,6 +61,20 @@ const UserRegister = asyncHandler(async (req, res, next) => {
       );
     }
 
+    const deptCode = (department || "").trim().toUpperCase();
+    const DEPARTMENT_MAP = {
+      "CS": "Computer Science & Engineering",
+      "IT": "Information Technology",
+      "ME": "Mechanical Engineering",
+      "EE": "Electrical Engineering",
+      "CE": "Civil Engineering",
+      "EC": "Electronics & Communication",
+      "HR": "Human Resources",
+      "ADMIN": "Administration",
+      "STAFF": "General Staff"
+    };
+    const deptName = DEPARTMENT_MAP[deptCode] || (deptCode ? `${deptCode} Department` : "General");
+
     const user = await User.create({
       fullname,
       enrollmentNo,
@@ -71,6 +85,8 @@ const UserRegister = asyncHandler(async (req, res, next) => {
       class: userClass,
       rollNo,
       role: role || "student",
+      departmentCode: deptCode,
+      departmentName: deptName,
     });
     if (!user) {
       throw new ApiError(
@@ -247,27 +263,47 @@ const changePassword = asyncHandler(async (req, res, next) => {
   }
 });
 const updateAccountDetails = asyncHandler(async (req, res, next) => {
-  const { fullname, enrollmentNo, email, mobileNo, class: userClass, rollNo } = req.body;
+  const { fullname, enrollmentNo, email, mobileNo, class: userClass, rollNo, department } = req.body;
 
   if (
-    [fullname, enrollmentNo, email, mobileNo, userClass, rollNo].some(
+    [fullname, enrollmentNo, email, mobileNo, userClass, rollNo, department].some(
       (field) => field !== undefined && (typeof field !== "string" || field.trim() === "")
     )
   ) {
     throw new ApiError(400, "Fields cannot be empty values.");
   }
 
+  const updateFields = {
+    email,
+    fullname,
+    mobileNo,
+    enrollmentNo,
+    class: userClass,
+    rollNo,
+  };
+
+  if (department !== undefined) {
+    const deptCode = department.trim().toUpperCase();
+    const DEPARTMENT_MAP = {
+      "CS": "Computer Science & Engineering",
+      "IT": "Information Technology",
+      "ME": "Mechanical Engineering",
+      "EE": "Electrical Engineering",
+      "CE": "Civil Engineering",
+      "EC": "Electronics & Communication",
+      "HR": "Human Resources",
+      "ADMIN": "Administration",
+      "STAFF": "General Staff"
+    };
+    const deptName = DEPARTMENT_MAP[deptCode] || (deptCode ? `${deptCode} Department` : "General");
+    updateFields.departmentCode = deptCode;
+    updateFields.departmentName = deptName;
+  }
+
   const user = await User.findByIdAndUpdate(
     req.user?._id,
     {
-      $set: {
-        email: email,
-        fullname: fullname,
-        mobileNo: mobileNo,
-        enrollmentNo: enrollmentNo,
-        class: userClass,
-        rollNo: rollNo,
-      },
+      $set: updateFields,
     },
     {
       new: true,
