@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { verifyJwt } from "../middleware/auth.middleware.js";
-import { verifyAdmin } from "../middleware/admin.middleware.js";
+import { authorizeRoles } from "../middleware/role.middleware.js";
 import {
   getDashboardStats,
   getAllStudents,
@@ -13,8 +13,8 @@ import {
 
 const router = Router();
 
-// All admin routes require authentication + admin role
-router.use(verifyJwt, verifyAdmin);
+// All admin routes require authentication + superuser/admin role
+router.use(verifyJwt, authorizeRoles("superuser", "admin"));
 
 router.route("/admin/dashboard").get(getDashboardStats);
 router.route("/admin/students").get(getAllStudents);

@@ -36,9 +36,6 @@ export const createNotification = asyncHandler(async (req, res, next) => {
       message,
       type: type || "info",
     });
-    if (newNotification && newNotification._id) {
-      res.location(`/notifications/${newNotification._id}`);
-    }
     res.status(201).json(new ApiResponse(201, { notification: newNotification }, "Notification created successfully"));
   } catch (error) {
     next(error);
@@ -120,28 +117,48 @@ export const clearAllNotifications = asyncHandler(async (req, res, next) => {
   }
 });
 
-// Broadcast notification to all users in the same department
+// Broadcast notification to tenant / department boundaries (Phase 8 Upgrades)
 export const broadcastNotification = asyncHandler(async (req, res, next) => {
   try {
-    const { title, message, type } = req.body;
+    const { title, message, type, departmentId, targetRole } = req.body;
     if (!title || !message) {
       throw new ApiError(400, "Title and message are required");
     }
 
-    // Only teachers or admins can broadcast
-    if (req.user?.role !== "admin" && req.user?.role !== "teacher") {
-      throw new ApiError(403, "Access Denied: Only teachers/admins can broadcast notices");
+    // Auth check: only admin or superuser
+    if (!["superuser", "admin"].includes(req.user?.role)) {
+      throw new ApiError(403, "Access Denied: Only admins or superusers can broadcast notices");
     }
 
-    const deptCode = req.user?.departmentCode;
-    if (!deptCode) {
-      throw new ApiError(400, "You must have a department code assigned to broadcast notices.");
+    const filter = {};
+
+    // Apply tenant boundary filters
+    if (req.user.role === "admin") {
+      filter.organizationId = req.user.organizationId;
+      if (req.user.departmentId) {
+        filter.departmentId = req.user.departmentId;
+      } else if (departmentId) {
+        filter.departmentId = departmentId;
+      }
+    } else if (req.user.role === "superuser") {
+      if (req.body.organizationId) {
+        filter.organizationId = req.body.organizationId;
+      } else {
+        filter.organizationId = req.user.organizationId;
+      }
+      if (departmentId) {
+        filter.departmentId = departmentId;
+      }
     }
 
-    // Find all users registered in this department (students, employees, etc.)
-    const users = await User.find({ departmentCode: deptCode }).select("_id");
+    if (targetRole) {
+      filter.role = targetRole;
+    }
+
+    // Find all matching users
+    const users = await User.find(filter).select("_id");
     if (users.length === 0) {
-      return res.status(200).json(new ApiResponse(200, null, "No users found in this department."));
+      return res.status(200).json(new ApiResponse(200, null, "No matching users found for broadcast."));
     }
 
     const notifications = users.map((u) => ({
@@ -159,7 +176,7 @@ export const broadcastNotification = asyncHandler(async (req, res, next) => {
         new ApiResponse(
           201,
           null,
-          `Announcement broadcasted successfully to ${users.length} users in department ${deptCode}.`
+          `Announcement broadcasted successfully to ${users.length} users.`
         )
       );
   } catch (error) {

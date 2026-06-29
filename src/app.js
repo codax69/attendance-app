@@ -21,10 +21,17 @@ import userRouter from "./routes/user.routes.js";
 import attendanceRouter from "./routes/attendance.routes.js";
 import notificationRouter from "./routes/notification.routes.js";
 import adminRouter from "./routes/admin.routes.js";
+import organizationRouter from "./routes/organization.routes.js";
+import departmentRouter from "./routes/department.routes.js";
+import reportRouter from "./routes/report.routes.js";
+
 app.use(["/api/v1/user", "/api/api/v1/user"], userRouter);
 app.use(["/api/v1/", "/api/api/v1/"], attendanceRouter);
-app.use(["/api/v1/", "/api/api/v1/"], notificationRouter);
+app.use(["/api/v1/notifications", "/api/api/v1/notifications", "/api/v1/", "/api/api/v1/"], notificationRouter);
 app.use(["/api/v1/", "/api/api/v1/"], adminRouter);
+app.use(["/api/v1/", "/api/api/v1/"], organizationRouter);
+app.use(["/api/v1/", "/api/api/v1/"], departmentRouter);
+app.use(["/api/v1/reports", "/api/api/v1/reports", "/api/v1/", "/api/api/v1/"], reportRouter);
 
 // Catch 404 and forward to global error handler
 app.use((req, res, next) => {

@@ -3,33 +3,39 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { attendance } from "../models/attendance.model.js";
 import { User } from "../models/user.model.js";
-import { Class } from "../models/class.model.js";
+import { Department } from "../models/department.model.js";
 
-// GET /admin/dashboard — Overall dashboard stats
+// GET /admin/dashboard — Tenant-aware stats
 export const getDashboardStats = asyncHandler(async (req, res, next) => {
   try {
-    const userQuery = { role: { $in: ["student", "employee"] } };
-    if (req.user?.role === "teacher") {
-      userQuery.departmentCode = req.user.departmentCode;
+    const userQuery = { role: "user" };
+
+    // Tenant scoping
+    if (req.user.role === "admin") {
+      userQuery.organizationId = req.user.organizationId;
+      if (req.user.departmentId) {
+        userQuery.departmentId = req.user.departmentId;
+      }
+    } else if (req.user.role !== "superuser") {
+      throw new ApiError(403, "Access Denied: Admin or SuperUser privileges required.");
     }
+
     const totalStudents = await User.countDocuments(userQuery);
 
-    // Get today's date string in DD/MM/YYYY format
     const today = new Date();
     const dd = String(today.getDate()).padStart(2, "0");
     const mm = String(today.getMonth() + 1).padStart(2, "0");
     const yyyy = today.getFullYear();
     const todayStr = `${dd}/${mm}/${yyyy}`;
 
-    // Fetch students to map today's records
     const studentsInScope = await User.find(userQuery).select("_id");
     const studentIdsInScope = studentsInScope.map(s => s._id);
 
-    // Count today's attendance records by status
-    const todayRecords = await attendance.find({ 
+    const todayRecords = await attendance.find({
       presentDays: todayStr,
       user: { $in: studentIdsInScope }
     });
+
     const todayPresentCount = todayRecords.filter(r => r.monthlyAttendance === "PRESENT").length;
     const todayLateCount = todayRecords.filter(r => r.monthlyAttendance === "LATE").length;
     const todayHalfDayCount = todayRecords.filter(r => r.monthlyAttendance === "HALF_DAY").length;
@@ -37,51 +43,60 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
     const todayPresentTotal = todayPresentCount + todayLateCount + todayHalfDayCount;
     const todayAbsentTotal = Math.max(0, totalStudents - todayPresentTotal - todayLeaveCount);
 
-    // Class-wise student breakdown
-    const classBreakdown = await User.aggregate([
+    const departmentBreakdown = await User.aggregate([
       { $match: userQuery },
       {
         $group: {
-          _id: "$class",
+          _id: "$departmentName",
           count: { $sum: 1 },
         },
       },
       { $sort: { _id: 1 } },
     ]);
 
-    // Class-wise stats breakdown
-    const classes = await Class.find().sort({ name: 1 });
-    const classStats = await Promise.all(
-      classes.map(async (cls) => {
-        const classPattern = `${cls.name} (${cls.code})`;
-        const studentClassQuery = { class: classPattern, role: { $in: ["student", "employee"] } };
-        if (req.user?.role === "teacher") {
-          studentClassQuery.departmentCode = req.user.departmentCode;
+    // Query departments associated with the user's organization
+    let orgQuery = {};
+    if (req.user.role !== "superuser") {
+      orgQuery.organizationId = req.user.organizationId;
+    }
+    const departments = await Department.find(orgQuery).sort({ name: 1 });
+
+    const departmentStats = await Promise.all(
+      departments.map(async (dept) => {
+        const studentDeptQuery = {
+          role: "user",
+          organizationId: dept.organizationId,
+          departmentId: dept._id
+        };
+
+        if (req.user.role === "admin" && req.user.departmentId && !req.user.departmentId.equals(dept._id)) {
+          return null; // admins with departments only see their own department stats
         }
-        const studentsInClass = await User.find(studentClassQuery).select("_id");
-        const studentIds = studentsInClass.map(s => s._id);
 
-        const classTodayRecords = todayRecords.filter(r => studentIds.some(id => id.equals(r.user)));
+        const studentsInDept = await User.find(studentDeptQuery).select("_id");
+        const studentIds = studentsInDept.map(s => s._id);
 
-        const present = classTodayRecords.filter(r => r.monthlyAttendance === "PRESENT").length;
-        const late = classTodayRecords.filter(r => r.monthlyAttendance === "LATE").length;
-        const halfDay = classTodayRecords.filter(r => r.monthlyAttendance === "HALF_DAY").length;
-        const leave = classTodayRecords.filter(r => r.monthlyAttendance === "LEAVE").length;
+        const deptTodayRecords = todayRecords.filter(r => studentIds.some(id => id.equals(r.user)));
 
-        const totalClassStudents = studentIds.length;
+        const present = deptTodayRecords.filter(r => r.monthlyAttendance === "PRESENT").length;
+        const late = deptTodayRecords.filter(r => r.monthlyAttendance === "LATE").length;
+        const halfDay = deptTodayRecords.filter(r => r.monthlyAttendance === "HALF_DAY").length;
+        const leave = deptTodayRecords.filter(r => r.monthlyAttendance === "LEAVE").length;
+
+        const totalDeptStudents = studentIds.length;
         const presentToday = present + late + halfDay;
-        const absentToday = Math.max(0, totalClassStudents - presentToday - leave);
+        const absentToday = Math.max(0, totalDeptStudents - presentToday - leave);
 
-        const rate = (totalClassStudents - leave) > 0
-          ? Math.round(((present + late + (halfDay * 0.5)) / (totalClassStudents - leave)) * 100)
+        const rate = (totalDeptStudents - leave) > 0
+          ? Math.round(((present + late + (halfDay * 0.5)) / (totalDeptStudents - leave)) * 100)
           : 100;
 
         return {
-          id: cls._id,
-          name: cls.name,
-          code: cls.code,
-          fullName: classPattern,
-          totalStudents: totalClassStudents,
+          id: dept._id,
+          name: dept.name,
+          code: dept.code || dept.name.slice(0, 3).toUpperCase(),
+          fullName: `${dept.name} (${dept.code || dept.name.slice(0, 3).toUpperCase()})`,
+          totalStudents: totalDeptStudents,
           presentToday,
           absentToday,
           leaveToday: leave,
@@ -91,7 +106,6 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
       })
     );
 
-    // Total attendance records
     const totalRecords = await attendance.countDocuments({ user: { $in: studentIdsInScope } });
 
     res.status(200).json(
@@ -104,11 +118,11 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
           todayLeave: todayLeaveCount,
           todayHalfDay: todayHalfDayCount,
           totalRecords,
-          classBreakdown: classBreakdown.map((c) => ({
-            class: c._id || "Unassigned",
-            count: c.count,
+          classBreakdown: departmentBreakdown.map((d) => ({
+            class: d._id || "Unassigned",
+            count: d.count,
           })),
-          classStats,
+          classStats: departmentStats.filter(Boolean),
           todayDate: todayStr,
         },
         "Dashboard stats fetched successfully"
@@ -119,26 +133,24 @@ export const getDashboardStats = asyncHandler(async (req, res, next) => {
   }
 });
 
-// GET /admin/students — List all students with optional class filter
+// GET /admin/students — List users
 export const getAllStudents = asyncHandler(async (req, res, next) => {
   try {
     const { class: classFilter, search, department: departmentFilter } = req.query;
-    const filter = { role: { $in: ["student", "employee"] } };
+    const filter = { role: "user" };
 
-    if (req.user?.role === "teacher") {
-      filter.departmentCode = req.user.departmentCode;
-    } else if (departmentFilter && departmentFilter !== "ALL") {
-      filter.departmentCode = departmentFilter;
+    // Tenant constraints
+    if (req.user.role === "admin") {
+      filter.organizationId = req.user.organizationId;
+      if (req.user.departmentId) {
+        filter.departmentId = req.user.departmentId;
+      }
+    } else if (req.user.role !== "superuser") {
+      throw new ApiError(403, "Access Denied");
     }
 
-    if (classFilter && classFilter !== "ALL") {
-      // Resolve class code to name if needed
-      const cls = await Class.findOne({ code: classFilter });
-      if (cls) {
-        filter.class = `${cls.name} (${cls.code})`;
-      } else {
-        filter.class = classFilter;
-      }
+    if (departmentFilter && departmentFilter !== "ALL") {
+      filter.departmentId = departmentFilter;
     }
 
     if (search) {
@@ -152,16 +164,14 @@ export const getAllStudents = asyncHandler(async (req, res, next) => {
 
     const students = await User.find(filter)
       .select("-password -refreshToken -accessToken")
-      .sort({ class: 1, rollNo: 1, fullname: 1 });
+      .sort({ departmentName: 1, rollNo: 1, fullname: 1 });
 
-    // Get today's date to find today's attendance for each student
     const today = new Date();
     const dd = String(today.getDate()).padStart(2, "0");
     const mm = String(today.getMonth() + 1).padStart(2, "0");
     const yyyy = today.getFullYear();
     const todayStr = `${dd}/${mm}/${yyyy}`;
 
-    // Fetch attendance records for all students in one query to avoid N+1
     const studentIds = students.map((s) => s._id);
     const allRecords = await attendance.find({ user: { $in: studentIds } });
     const recordsByUser = allRecords.reduce((acc, r) => {
@@ -191,11 +201,12 @@ export const getAllStudents = asyncHandler(async (req, res, next) => {
       return {
         _id: student._id,
         fullname: student.fullname,
+        name: student.name || student.fullname,
         enrollmentNo: student.enrollmentNo,
         mobileNo: student.mobileNo,
         email: student.email,
         age: student.age,
-        class: student.class,
+        class: student.class || student.departmentName,
         rollNo: student.rollNo,
         isLoggedIn: student.isLoggedIn,
         createdAt: student.createdAt,
@@ -222,15 +233,21 @@ export const getAllStudents = asyncHandler(async (req, res, next) => {
   }
 });
 
-// GET /admin/students/:userId/attendance — Get specific student's attendance
+// GET /admin/students/:userId/attendance — specific user history
 export const getStudentAttendance = asyncHandler(async (req, res, next) => {
   try {
     const { userId } = req.params;
-    
-    const studentQuery = { _id: userId };
-    if (req.user?.role === "teacher") {
-      studentQuery.departmentCode = req.user.departmentCode;
+
+    const studentQuery = { _id: userId, role: "user" };
+    if (req.user.role === "admin") {
+      studentQuery.organizationId = req.user.organizationId;
+      if (req.user.departmentId) {
+        studentQuery.departmentId = req.user.departmentId;
+      }
+    } else if (req.user.role !== "superuser") {
+      throw new ApiError(403, "Access Denied");
     }
+
     const student = await User.findOne(studentQuery).select(
       "-password -refreshToken -accessToken"
     );
@@ -257,38 +274,32 @@ export const getStudentAttendance = asyncHandler(async (req, res, next) => {
   }
 });
 
-// GET /admin/report — Class-wise attendance report with date range
+// GET /admin/report — Department/Class report
 export const getClassAttendanceReport = asyncHandler(async (req, res, next) => {
   try {
-    const { class: classFilter, month, year, department: departmentFilter } = req.query;
+    const { month, year, department: departmentFilter } = req.query;
 
-    // Get students for the class
-    const studentFilter = { role: { $in: ["student", "employee"] } };
-    if (req.user?.role === "teacher") {
-      studentFilter.departmentCode = req.user.departmentCode;
-    } else if (departmentFilter && departmentFilter !== "ALL") {
-      studentFilter.departmentCode = departmentFilter;
+    const studentFilter = { role: "user" };
+    if (req.user.role === "admin") {
+      studentFilter.organizationId = req.user.organizationId;
+      if (req.user.departmentId) {
+        studentFilter.departmentId = req.user.departmentId;
+      }
+    } else if (req.user.role !== "superuser") {
+      throw new ApiError(403, "Access Denied");
     }
 
-    if (classFilter && classFilter !== "ALL") {
-      // Resolve class code to name if needed
-      const cls = await Class.findOne({ code: classFilter });
-      if (cls) {
-        studentFilter.class = `${cls.name} (${cls.code})`;
-      } else {
-        studentFilter.class = classFilter;
-      }
+    if (departmentFilter && departmentFilter !== "ALL") {
+      studentFilter.departmentId = departmentFilter;
     }
 
     const students = await User.find(studentFilter).select(
-      "_id fullname enrollmentNo rollNo class"
+      "_id fullname enrollmentNo rollNo class departmentName"
     );
     const studentIds = students.map((s) => s._id);
 
-    // Get all attendance records for these students
     let records = await attendance.find({ user: { $in: studentIds } });
 
-    // Filter by month/year if provided
     if (month && year) {
       const targetMonth = String(parseInt(month)).padStart(2, "0");
       const targetYear = String(year);
@@ -300,9 +311,7 @@ export const getClassAttendanceReport = asyncHandler(async (req, res, next) => {
       });
     }
 
-    // Build date-wise attendance summary
     const dateMap = {};
-    // Build a set of studentIds per date to derive per-date roster size
     records.forEach((r) => {
       const date = r.presentDays;
       if (!date) return;
@@ -323,16 +332,13 @@ export const getClassAttendanceReport = asyncHandler(async (req, res, next) => {
       }
     });
 
-    // Calculate per-date total from recorded studentSet then compute absent
     Object.values(dateMap).forEach((d) => {
       d.total = d.studentSet ? d.studentSet.size : 0;
       d.absent = d.total - d.present - d.late - d.halfDay - d.leave;
       if (d.absent < 0) d.absent = 0;
-      // remove helper
       delete d.studentSet;
     });
 
-    // Sort dates descending
     const report = Object.values(dateMap).sort((a, b) => {
       const partsA = a.date.split("/");
       const partsB = b.date.split("/");
@@ -345,7 +351,7 @@ export const getClassAttendanceReport = asyncHandler(async (req, res, next) => {
       new ApiResponse(
         200,
         {
-          classFilter: classFilter || "ALL",
+          classFilter: departmentFilter || "ALL",
           totalStudents: students.length,
           report,
         },
@@ -357,7 +363,7 @@ export const getClassAttendanceReport = asyncHandler(async (req, res, next) => {
   }
 });
 
-// POST /admin/attendance/update — Update or create student attendance for a date
+// POST /admin/attendance/update — Manual override
 export const updateStudentAttendance = asyncHandler(async (req, res, next) => {
   try {
     const { userId, date, status, time } = req.body;
@@ -371,20 +377,24 @@ export const updateStudentAttendance = asyncHandler(async (req, res, next) => {
       throw new ApiError(400, "Invalid attendance status");
     }
 
-    const studentQuery = { _id: userId };
-    if (req.user?.role === "teacher") {
-      studentQuery.departmentCode = req.user.departmentCode;
+    const studentQuery = { _id: userId, role: "user" };
+    if (req.user.role === "admin") {
+      studentQuery.organizationId = req.user.organizationId;
+      if (req.user.departmentId) {
+        studentQuery.departmentId = req.user.departmentId;
+      }
+    } else if (req.user.role !== "superuser") {
+      throw new ApiError(403, "Access Denied");
     }
+
     const student = await User.findOne(studentQuery);
     if (!student) {
       throw new ApiError(404, "Student not found or unauthorized access");
     }
 
-    // Check if record exists for this student and date
     let record = await attendance.findOne({ user: userId, presentDays: date });
 
     if (status === "ABSENT") {
-      // If setting to ABSENT, we delete the record so it falls back to virtual absent
       if (record) {
         await attendance.findByIdAndDelete(record._id);
       }
@@ -403,18 +413,21 @@ export const updateStudentAttendance = asyncHandler(async (req, res, next) => {
     const recordTime = time || (record ? record.activeDays : defaultTimes[status]);
 
     if (record) {
-      // Update existing record
       record.monthlyAttendance = status;
       record.activeDays = recordTime;
       await record.save();
     } else {
-      // Create new record
       record = await attendance.create({
         user: userId,
+        organizationId: student.organizationId,
+        departmentId: student.departmentId,
         presentDays: date,
         activeDays: recordTime,
         monthlyAttendance: status,
-        googleSheetLink: "Marked by Teacher"
+        googleSheetLink: "Marked manually",
+        session: "manual",
+        departmentCode: student.departmentCode || "",
+        departmentName: student.departmentName || "",
       });
     }
 
@@ -426,46 +439,48 @@ export const updateStudentAttendance = asyncHandler(async (req, res, next) => {
   }
 });
 
-// POST /admin/class — Add a new class
+// Legacy CRUD for Classes (map to Department)
 export const createClass = asyncHandler(async (req, res, next) => {
-  try {
-    const { name, code } = req.body;
-
-    if (!name || !code) {
-      throw new ApiError(400, "Class name and code are required");
-    }
-
-    const existingClass = await Class.findOne({ $or: [{ name }, { code }] });
-    if (existingClass) {
-      throw new ApiError(400, "Class with this name or code already exists");
-    }
-
-    const newClass = await Class.create({ name, code });
-
-    res.status(201).json(
-      new ApiResponse(201, { class: newClass }, "Class created successfully")
-    );
-  } catch (error) {
-    next(error);
+  const { name, code } = req.body;
+  if (!name || !code) {
+    throw new ApiError(400, "Class name and code are required");
   }
+
+  let orgId = req.user.organizationId;
+  if (!orgId) {
+    const defaultOrg = await Organization.findOne({ status: "active" });
+    if (defaultOrg) orgId = defaultOrg._id;
+  }
+
+  if (!orgId) {
+    throw new ApiError(400, "Organization not configured");
+  }
+
+  const existingDept = await Department.findOne({ name, organizationId: orgId });
+  if (existingDept) {
+    throw new ApiError(400, "Class/Department already exists");
+  }
+
+  const department = await Department.create({
+    name,
+    code: code.toUpperCase(),
+    organizationId: orgId,
+  });
+
+  res.status(201).json(
+    new ApiResponse(201, { class: department }, "Class (Department) created successfully")
+  );
 });
 
-// DELETE /admin/class/:id — Delete a class
 export const deleteClass = asyncHandler(async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const classToDelete = await Class.findById(id);
-    if (!classToDelete) {
-      throw new ApiError(404, "Class not found");
-    }
-
-    await Class.findByIdAndDelete(id);
-
-    res.status(200).json(
-      new ApiResponse(200, null, "Class deleted successfully")
-    );
-  } catch (error) {
-    next(error);
+  const { id } = req.params;
+  const dept = await Department.findById(id);
+  if (!dept) {
+    throw new ApiError(404, "Class not found");
   }
+
+  await Department.findByIdAndDelete(id);
+  res.status(200).json(
+    new ApiResponse(200, null, "Class (Department) deleted successfully")
+  );
 });

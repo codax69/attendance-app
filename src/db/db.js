@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import dns from "node:dns";
 import { Class } from "../models/class.model.js";
+import { runDatabaseMigration } from "./migration.js";
 
 // By default do not mutate global DNS settings. Export an initializer
 // or set FORCE_GOOGLE_DNS=true to opt in on environments that need it.
@@ -28,24 +29,9 @@ export const ConnectDB = async () => {
     );
     console.log("✅ DB HOSTED ON:", connectionDB.connection.host);
 
-    // Seed default classes if none exist
-    try {
-      const defaultClasses = [
-        { name: "Information Technology", code: "IT" },
-        { name: "Computer Engineering", code: "CO" },
-        { name: "Mechanical Engineering", code: "ME" },
-        { name: "Electrical Engineering", code: "EE" },
-        { name: "Civil Engineering", code: "CE" },
-        { name: "Electronics & Communication", code: "EC" },
-      ];
-      const count = await Class.countDocuments();
-      if (count === 0) {
-        await Class.insertMany(defaultClasses);
-        console.log("✅ Seeded default classes successfully");
-      }
-    } catch (seedErr) {
-      console.warn("⚠️ Class seeding failed:", seedErr.message);
-    }
+    // Run SaaS migration
+    await runDatabaseMigration();
+
   } catch (err) {
     console.error("❌ Database connection failed:", err.message);
     process.exit(1);
