@@ -35,12 +35,11 @@ If DNS SRV queries are blocked in your network, use the standard format:
 
 In `.env`, replace:
 ```
-DB_URI=mongodb+srv://prit9265:pritesh69@cluster0.tfe9svb.mongodb.net/attendance-app
 ```
 
 With (get from MongoDB Atlas):
 ```
-DB_URI=mongodb://prit9265:pritesh69@cluster0-shard-00-00.tfe9svb.mongodb.net:27017,cluster0-shard-00-01.tfe9svb.mongodb.net:27017,cluster0-shard-00-02.tfe9svb.mongodb.net:27017/?ssl=true&replicaSet=atlas-xxx&authSource=admin&retryWrites=true&w=majority
+
 ```
 
 Get this from MongoDB Atlas: **Cluster** → **Connect** → **Drivers** → Copy connection string
