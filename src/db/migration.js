@@ -6,8 +6,6 @@ import { Class } from "../models/class.model.js";
 
 export const runDatabaseMigration = async () => {
   try {
-    console.log("🔄 Starting database migration to Multi-Tenant SaaS structure...");
-
     // 1. Ensure a default organization exists
     let defaultOrg = await Organization.findOne({ status: "active" });
     if (!defaultOrg) {
@@ -19,7 +17,6 @@ export const runDatabaseMigration = async () => {
         address: "Campus Block A",
         status: "active",
       });
-      console.log("✅ Created default Organization:", defaultOrg.name);
     }
 
     // 2. Map old Classes to Departments
@@ -37,7 +34,6 @@ export const runDatabaseMigration = async () => {
           organizationId: defaultOrg._id,
           description: `Migrated from legacy class ${legacyClass.name}`,
         });
-        console.log(`✅ Created Department [${dept.name}] from legacy Class`);
       }
     }
 
@@ -103,8 +99,6 @@ export const runDatabaseMigration = async () => {
       }
     }
 
-    console.log(`✅ Migrated/Updated ${migratedUsersCount} Users.`);
-
     // 4. Migrate Attendance logs
     const logs = await attendance.find();
     let migratedLogsCount = 0;
@@ -151,8 +145,6 @@ export const runDatabaseMigration = async () => {
       }
     }
 
-    console.log(`✅ Migrated/Updated ${migratedLogsCount} Attendance records.`);
-    console.log("🏁 Database migration finished successfully.");
   } catch (err) {
     console.error("❌ Database migration failed:", err.message);
   }

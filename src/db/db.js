@@ -27,8 +27,6 @@ export const ConnectDB = async () => {
         socketTimeoutMS: 45000,
       },
     );
-    console.log("✅ DB HOSTED ON:", connectionDB.connection.host);
-
     // Run SaaS migration
     await runDatabaseMigration();
 

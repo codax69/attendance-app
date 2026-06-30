@@ -31,7 +31,6 @@ const options = {
 
 const userWelcome = asyncHandler(async (req, res, next) => {
   try {
-    console.log("Request received..!");
     res
       .status(200)
       .json(
